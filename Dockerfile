@@ -111,10 +111,16 @@ RUN cd /work/aeneas && eval $(opam env) && make build-bin-dir && ./bin/aeneas -h
 
 # Smoke test: extract one small crate, check it reproduces the committed
 # golden byte for byte, and certify it with its proof book.
+# NOTE: aeneas exits nonzero whenever it skips a construct the ACL2 backend
+# does not translate yet (closures in output, un-monomorphized trait calls;
+# see PORTING-NOTES-ACL2.md) while still writing the book -- the Makefile's
+# `regen` uses `|| true` for the same reason. The byte-for-byte comparison
+# with the golden is the real check, so the exit status is ignored here.
 RUN cd /work/aeneas/tests/acl2 && eval $(opam env) && mkdir -p ../llbc \
     && /work/charon/bin/charon rustc --dest-file ../llbc/demo.llbc --preset=aeneas -- \
          ../src/demo.rs --crate-name=demo --crate-type=rlib --allow=unused --allow=non_snake_case \
-    && /work/aeneas/bin/aeneas -backend acl2 -use-fuel -loops-to-rec -dest /tmp/smoke ../llbc/demo.llbc \
+    && (/work/aeneas/bin/aeneas -backend acl2 -use-fuel -loops-to-rec -dest /tmp/smoke ../llbc/demo.llbc || true) \
+    && test -s /tmp/smoke/demo.lisp \
     && diff -q /tmp/smoke/demo.lisp demo.lisp \
     && cert.pl -j 2 rust-primitives demo proofs \
     && echo "SMOKE OK: extraction reproduces the golden and certifies"
