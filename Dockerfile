@@ -18,7 +18,7 @@
 # =============================================================================
 
 ARG CHARON_REPO=https://github.com/bendyarm/charon
-ARG CHARON_COMMIT=58b7d543566f212cd2dabd723b06ccc23ea34075
+ARG CHARON_COMMIT=23cf8c88b7a13ee26b3c6bea772d494b98ef64ce
 ARG AENEAS_REPO=https://github.com/bendyarm/aeneas
 ARG AENEAS_REF=acl2-backend
 ARG AENEAS_COMMIT=c1dcfb5464916d0d094dc8925b7c230d65ad389d
