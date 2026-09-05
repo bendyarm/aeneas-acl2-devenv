@@ -1,0 +1,92 @@
+name: build-and-publish
+
+# Builds the dev image from pins.env and publishes it to ghcr.io.
+# - push to main (pins.env / Dockerfile / scripts changed): build + push `latest` and a pinned tag
+# - tag v*: also export a rootfs tarball to a GitHub release (for consumers without registry access)
+# - workflow_dispatch: same as push, with an optional AENEAS_COMMIT override (e.g. "head of acl2-backend")
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      aeneas_commit:
+        description: "Override AENEAS_COMMIT (leave empty to use pins.env)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write     # release upload
+  packages: write     # ghcr.io push
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/aeneas-acl2-dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free runner disk (the toolchain stage needs ~10 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Load pins
+        id: pins
+        run: |
+          set -a; . ./pins.env; set +a
+          if [ -n "${{ github.event.inputs.aeneas_commit }}" ]; then AENEAS_COMMIT="${{ github.event.inputs.aeneas_commit }}"; fi
+          for v in CHARON_REPO CHARON_COMMIT AENEAS_REPO AENEAS_REF AENEAS_COMMIT KCERTS_IMAGE OCAML_VERSION; do
+            echo "$v=${!v}" >> "$GITHUB_OUTPUT"; done
+          echo "tag=aeneas-${AENEAS_COMMIT:0:7}_charon-${CHARON_COMMIT:0:7}_acl2-${KCERTS_IMAGE##*-}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.pins.outputs.tag }}
+          build-args: |
+            CHARON_REPO=${{ steps.pins.outputs.CHARON_REPO }}
+            CHARON_COMMIT=${{ steps.pins.outputs.CHARON_COMMIT }}
+            AENEAS_REPO=${{ steps.pins.outputs.AENEAS_REPO }}
+            AENEAS_REF=${{ steps.pins.outputs.AENEAS_REF }}
+            AENEAS_COMMIT=${{ steps.pins.outputs.AENEAS_COMMIT }}
+            KCERTS_IMAGE=${{ steps.pins.outputs.KCERTS_IMAGE }}
+            OCAML_VERSION=${{ steps.pins.outputs.OCAML_VERSION }}
+            JOBS=4
+          # Layer cache in the registry: a pins-only change to AENEAS_COMMIT
+          # reuses the toolchain and charon stages and rebuilds `dev` only.
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      - name: Print manifest and digest
+        run: |
+          docker run --rm ${{ env.IMAGE }}:${{ steps.pins.outputs.tag }} cat /etc/aeneas-dev-manifest
+          echo "image_digest=${{ steps.build.outputs.digest }}"
+
+      # Release tarball only for version tags: a flat rootfs for environments
+      # that can reach GitHub release assets but not a container registry.
+      - name: Export rootfs and upload to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          scripts/export-rootfs.sh ${{ env.IMAGE }}:${{ steps.pins.outputs.tag }} out
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
+            --notes-file <(echo '```'; docker run --rm ${{ env.IMAGE }}:${{ steps.pins.outputs.tag }} cat /etc/aeneas-dev-manifest; echo '```') \
+            out/*
