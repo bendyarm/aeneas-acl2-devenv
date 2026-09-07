@@ -1,0 +1,2 @@
+# written by scripts/bootstrap-sandbox.sh, read by scripts/in-dev.sh (local state)
+/scripts/.dev-root

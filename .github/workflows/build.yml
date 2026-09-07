@@ -8,6 +8,13 @@ name: build-and-publish
 on:
   push:
     branches: [main]
+    # only files that change the image start a build (README, scripts and
+    # .gitignore do not); tag pushes ignore this filter and always build
+    paths:
+      - Dockerfile
+      - pins.env
+      - docs/ENVIRONMENT.md
+      - .github/workflows/build.yml
     tags: ['v*']
   workflow_dispatch:
     inputs:

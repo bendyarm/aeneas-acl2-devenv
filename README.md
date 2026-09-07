@@ -124,11 +124,19 @@ exports the image as a flat rootfs (`scripts/export-rootfs.sh`: zstd, split into
 but not a registry, and for depositing on Zenodo. Cite the release tag together with the
 manifest and image digest printed by that workflow run.
 
+The **v1.0.0** release (image tag `aeneas-23cf8c8_charon-58b7d54_acl2-0612757`, digest
+`sha256:1931376654f7d49ce6c52bc1914ce3ea9e606491a46f1cfca65d2dff049389ae`) is archived on
+Zenodo: DOI [10.5281/zenodo.22365956](https://doi.org/10.5281/zenodo.22365956). It is the
+pinned environment of the ACL2-2026 paper *Verifying RustCrypto's Fixsliced AES-128 in
+ACL2*; cite the DOI for the archived copy, or the release tag plus image digest for the
+registry copy.
+
 ## Layout
 
 ```
 Dockerfile                    stages: toolchain -> charon -> (acl2 copied from kcerts) -> dev
 pins.env                      the version pins
+LICENSE.txt                   BSD 3-Clause (matches the LICENSE.txt in the Zenodo deposit)
 .github/workflows/build.yml   build, push to ghcr.io, release tarball on tags
 scripts/pull-image.sh         pull an image from ghcr.io without Docker (curl + tar)
 scripts/bootstrap-sandbox.sh  fetch (image or release), unpack, wire the proxy, mount /proc
